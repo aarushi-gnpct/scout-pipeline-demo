@@ -22,7 +22,7 @@ jobs:
 
       - name: Run ESLint
         run: npx ng lint
- 
+
       - name: Check Prettier formatting
         run: npm run format:check
 
