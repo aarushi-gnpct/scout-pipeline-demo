@@ -1,0 +1,6 @@
+dist
+.angular
+node_modules
+coverage
+**/*.json 
+**/*.yml
