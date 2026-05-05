@@ -47,3 +47,6 @@ jobs:
 
       - name: Production build
         run: npx ng build --configuration production
+
+      - name: Check bundle size 
+        run: npm run bundle:check 

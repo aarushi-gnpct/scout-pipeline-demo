@@ -8,7 +8,8 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "lint": "ng lint",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "bundle:check": "node check-bundle-size.js"
   },
   "private": true,
   "packageManager": "npm@11.12.1",
