@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const LIMIT_KB = 350;
+const LIMIT_KB = 1;
 const DIST_DIR = path.join(__dirname, 'dist/scout-pipeline-demo/browser');
 
 const files = fs.readdirSync(DIST_DIR).filter((f) => f.endsWith('.js'));
