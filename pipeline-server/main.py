@@ -81,6 +81,94 @@ def create_commit_status(repo: str, sha: str, findings: list) -> None:
     response = requests.post(url, headers=headers, json=payload)
     print(f"Status API response: {response.status_code}", flush=True)
 
+
+def run_trufflehog(files: dict) -> list:
+    findings = []
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for filepath, content in files.items():
+            safe_path = os.path.join(tmpdir, os.path.basename(filepath))
+            with open(safe_path, "w") as f:
+                f.write(content)
+        result = subprocess.run(
+            ["trufflehog", "filesystem", tmpdir, "--json", "--no-update"],
+            capture_output=True, text=True
+        )
+        for line in result.stdout.strip().split("\n"):
+            if line:
+                try:
+                    data = json.loads(line)
+                    findings.append({
+                        "tool": "trufflehog",
+                        "file": data.get("SourceMetadata", {}).get("Data", {}).get("Filesystem", {}).get("file", "unknown"),
+                        "severity": "ERROR",
+                        "message": f"Secret detected: {data.get('DetectorName', 'unknown')}",
+                        "rule": data.get("DetectorName", "unknown")
+                    })
+                except:
+                    pass
+    return findings
+
+def create_trufflehog_status(repo: str, sha: str, findings: list) -> None:
+    url = f"https://api.github.com/repos/{repo}/statuses/{sha}"
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json"
+    }
+    state = "failure" if findings else "success"
+    description = f"Found {len(findings)} secret(s)." if findings else "No secrets found. PR is clear."
+    if len(description) > 140:
+        description = description[:137] + "..."
+    payload = {
+        "state": state,
+        "description": description,
+        "context": "Secret Scan Agent"
+    }
+    requests.post(url, headers=headers, json=payload)
+
+
+def run_trufflehog(files: dict) -> list:
+    findings = []
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for filepath, content in files.items():
+            safe_path = os.path.join(tmpdir, os.path.basename(filepath))
+            with open(safe_path, "w") as f:
+                f.write(content)
+        result = subprocess.run(
+            ["trufflehog", "filesystem", tmpdir, "--json", "--no-update"],
+            capture_output=True, text=True
+        )
+        for line in result.stdout.strip().split("\n"):
+            if line:
+                try:
+                    data = json.loads(line)
+                    findings.append({
+                        "tool": "trufflehog",
+                        "file": data.get("SourceMetadata", {}).get("Data", {}).get("Filesystem", {}).get("file", "unknown"),
+                        "severity": "ERROR",
+                        "message": f"Secret detected: {data.get('DetectorName', 'unknown')}",
+                        "rule": data.get("DetectorName", "unknown")
+                    })
+                except:
+                    pass
+    return findings
+
+def create_trufflehog_status(repo: str, sha: str, findings: list) -> None:
+    url = f"https://api.github.com/repos/{repo}/statuses/{sha}"
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json"
+    }
+    state = "failure" if findings else "success"
+    description = f"Found {len(findings)} secret(s)." if findings else "No secrets found. PR is clear."
+    if len(description) > 140:
+        description = description[:137] + "..."
+    payload = {
+        "state": state,
+        "description": description,
+        "context": "Secret Scan Agent"
+    }
+    requests.post(url, headers=headers, json=payload)
+
 def run_security_scan(repo: str, pr_number: int, sha: str, ref: str):
     pr_files = get_pr_files(repo, pr_number)
     file_contents = {}
@@ -91,6 +179,10 @@ def run_security_scan(repo: str, pr_number: int, sha: str, ref: str):
                 file_contents[f["filename"]] = content
     findings = run_semgrep(file_contents) if file_contents else []
     create_commit_status(repo, sha, findings)
+    secret_findings = run_trufflehog(file_contents) if file_contents else []
+    create_trufflehog_status(repo, sha, secret_findings)
+    secret_findings = run_trufflehog(file_contents) if file_contents else []
+    create_trufflehog_status(repo, sha, secret_findings)
 
 @app.post("/webhook")
 async def webhook(request: Request, background_tasks: BackgroundTasks):
@@ -115,3 +207,4 @@ async def webhook(request: Request, background_tasks: BackgroundTasks):
 @app.get("/")
 def root():
     return {"status": "pipeline server running"}
+ 
