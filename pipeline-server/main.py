@@ -169,6 +169,54 @@ def create_trufflehog_status(repo: str, sha: str, findings: list) -> None:
     }
     requests.post(url, headers=headers, json=payload)
 
+
+def run_dependency_scan(repo: str, ref: str) -> list:
+    findings = []
+    url = f"https://api.github.com/repos/{repo}/contents/package.json?ref={ref}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        return findings
+    import base64, json as json2
+    content = base64.b64decode(response.json().get("content", "")).decode("utf-8")
+    pkg = json2.loads(content)
+    deps = {}
+    deps.update(pkg.get("dependencies", {}))
+    deps.update(pkg.get("devDependencies", {}))
+    for name, version in deps.items():
+        clean_version = version.strip("^~>=<")
+        payload = {"version": clean_version, "package": {"name": name, "ecosystem": "npm"}}
+        r = requests.post("https://api.osv.dev/v1/query", json=payload)
+        if r.status_code == 200:
+            vulns = r.json().get("vulns", [])
+            for v in vulns:
+                findings.append({
+                    "tool": "osv",
+                    "package": name,
+                    "version": clean_version,
+                    "severity": "ERROR",
+                    "message": f"{v.get('id')}: {v.get('summary', 'Vulnerability found')}",
+                    "rule": v.get("id", "unknown")
+                })
+    return findings
+
+def create_dependency_status(repo: str, sha: str, findings: list) -> None:
+    url = f"https://api.github.com/repos/{repo}/statuses/{sha}"
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json"
+    }
+    state = "failure" if findings else "success"
+    description = f"Found {len(findings)} vulnerable dependency(s)." if findings else "No vulnerable dependencies found."
+    if len(description) > 140:
+        description = description[:137] + "..."
+    payload = {
+        "state": state,
+        "description": description,
+        "context": "Dependency Scan Agent"
+    }
+    requests.post(url, headers=headers, json=payload)
+
 def run_security_scan(repo: str, pr_number: int, sha: str, ref: str):
     pr_files = get_pr_files(repo, pr_number)
     file_contents = {}
@@ -181,6 +229,8 @@ def run_security_scan(repo: str, pr_number: int, sha: str, ref: str):
     create_commit_status(repo, sha, findings)
     secret_findings = run_trufflehog(file_contents) if file_contents else []
     create_trufflehog_status(repo, sha, secret_findings)
+    dep_findings = run_dependency_scan(repo, ref)
+    create_dependency_status(repo, sha, dep_findings)
     secret_findings = run_trufflehog(file_contents) if file_contents else []
     create_trufflehog_status(repo, sha, secret_findings)
 
