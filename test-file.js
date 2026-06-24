@@ -1,2 +1,1 @@
-const userInput = document.location.hash;
-eval(userInput);
+console.log("hello world");
